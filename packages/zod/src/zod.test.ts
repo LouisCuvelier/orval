@@ -7973,6 +7973,63 @@ describe('generateZodWithLiteralProperty', () => {
   });
 });
 
+// A `const` pins the value, so it renders as a literal whatever its format.
+// Zod 4 used to drop it (`zod.email()`), and Zod 3 chained the format method
+// onto the literal (`zod.literal(...).email()`), which did not compile.
+describe.each([
+  { version: 3, variant: 'classic' },
+  { version: 4, variant: 'classic' },
+  { version: 4, variant: 'mini' },
+] as const)(
+  'const with a predefined format (Zod $version, $variant)',
+  ({ version, variant }) => {
+    const render = (schema: OpenApiSchemaObject) => {
+      const context = makeContextSpec();
+      const definition = generateZodValidationSchemaDefinition(
+        schema,
+        context,
+        'fixed',
+        false,
+        version === 4,
+        { required: true },
+      );
+      return parseZodValidationSchemaDefinition(
+        definition,
+        context,
+        false,
+        false,
+        version === 4,
+        undefined,
+        undefined,
+        variant,
+      );
+    };
+    const pure = variant === 'mini' ? '/*#__PURE__*/ ' : '';
+
+    it.each([...predefinedZodFormats])(
+      'renders a const with format %s as a literal',
+      (format) => {
+        const parsed = render({ type: 'string', format, const: 'fixed' });
+
+        expect(parsed.zod).toBe(`${pure}zod.literal("fixed")`);
+      },
+    );
+
+    it('skips the length and pattern checks of a formatted const', () => {
+      const parsed = render({
+        type: 'string',
+        format: 'email',
+        const: 'a@b.co',
+        minLength: 2,
+        pattern: '^a',
+      });
+
+      expect(parsed.zod).toBe(`${pure}zod.literal("a@b.co")`);
+      expect(parsed.consts).toBe('');
+    });
+  },
+);
+
 const schemaWithRequiredDefaults = createTestGeneratorOptions({
   pathRoute: '/gizmo',
   context: {

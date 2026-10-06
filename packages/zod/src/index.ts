@@ -1651,11 +1651,18 @@ export const generateZodValidationSchemaDefinition = (
           break;
         }
 
+        // A `const` pins the value, so it renders as a literal whatever its
+        // format. Handling it before the format branches keeps Zod 4 from
+        // dropping it (`zod.email()`) and Zod 3 from chaining a format method
+        // onto the literal (`zod.literal(...).email()`), which does not compile.
+        if ('const' in schema) {
+          functions.push(['literal', JSON.stringify(String(schema.const))]);
+          break;
+        }
+
         if (isZodV4) {
           if (!predefinedZodFormats.has(schema.format ?? '')) {
-            if ('const' in schema) {
-              functions.push(['literal', JSON.stringify(String(schema.const))]);
-            } else if (schema.pattern && schema.format) {
+            if (schema.pattern && schema.format) {
               const regexp = buildRegExpLiteral(schema.pattern);
               consts.push(
                 `export const ${name}RegExp${constsCounterValue} = ${regexp};\n`,
@@ -1673,11 +1680,7 @@ export const generateZodValidationSchemaDefinition = (
             break;
           }
         } else {
-          if ('const' in schema) {
-            functions.push(['literal', JSON.stringify(String(schema.const))]);
-          } else {
-            functions.push([type as string, undefined]);
-          }
+          functions.push([type as string, undefined]);
         }
 
         if (schema.format === 'date') {
